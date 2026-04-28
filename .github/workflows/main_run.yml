@@ -1,0 +1,82 @@
+ name: Start tunnel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      CODESPACE_NAME: ${{ secrets.CODESPACE_NAME }}
+
+    steps:
+      - name: Verify secrets
+        run: |
+          test -n "$GH_TOKEN"
+          test -n "$CODESPACE_NAME"
+
+      - name: Check GitHub CLI
+        run: gh --version
+
+      - name: Authenticate gh
+        run: gh auth status
+
+      - name: Start codespace
+        run: |
+          gh api \
+            --method POST \
+            /user/codespaces/$CODESPACE_NAME/start
+
+      - name: Wait until codespace is available
+        run: |
+          for i in {1..60}; do
+            STATE=$(gh api /user/codespaces/$CODESPACE_NAME --jq '.state&apos
+            echo "Codespace state: $STATE"
+
+            if [ "$STATE" = "Available" ] || [ "$STATE" = "Running" ]; then
+              exit 0
+            fi
+
+            sleep 5
+          done
+
+          echo "Timed out waiting for codespace"
+          exit 1
+
+      - name: Wait for Xray startup
+        run: sleep 5
+
+      - name: Show Xray logs
+        run: |
+          echo "Fetching logs from codespace..."
+          gh codespace ssh -c "${CODESPACE_NAME}" -- "echo '--- XRAY LOG ---' && tail -n 200 /tmp/xray.log || true"
+
+      - name: Check tunnel health
+        run: |
+          URL="https/${CODESPACE_NAME}-443.app.github.dev"
+
+          for i in {1..20}; do
+            if curl -k -I --max-time 5 "$URL" >/dev/null 2>&1; then
+              echo "Tunnel is reachable"
+              exit 0
+            fi
+
+            echo "Waiting for tunnel..."
+            sleep 3
+          done
+
+          echo "Tunnel health check failed"
+          exit 1
+
+      - name: Check if Xray process is running
+        run: gh codespace ssh -c "${CODESPACE_NAME}" -- "ps aux | grep xray || true"
+
+      - name: Print VLESS link
+        run: |
+          echo "============================"
+          echo "VLESS LINK"
+          echo "============================"
+          echo "vless/550e8400-e29b-41d4-a716-446655440000@94.130.50.12:443?encryption=none&security=tls&type=xhttp&mode=packet-up&sni=${CODESPACE_NAME}-443.app.github.dev&path=%2F#ghtun"
+          echo "============================"
