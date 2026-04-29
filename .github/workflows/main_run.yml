@@ -20,17 +20,23 @@ jobs:
         
                   if [ -z "$EXISTING_CODESPACE" ]; then
                     echo "Creating new Codespace..."
-                    # Create and capture the name of the new codespace
-                    EXISTING_CODESPACE=$(gh codespace create --repo ${{ github.repository }} --branch ${{ github.ref_name }})
+                    gh codespace create --repo ${{ github.repository }} --branch ${{ github.ref_name }}
+                    # Give it a moment to provision
+                    sleep 30
+                    EXISTING_CODESPACE=$(gh codespace list --repo ${{ github.repository }} --json name --jq '.[0].name')
                   else
                     echo "Using existing Codespace: $EXISTING_CODESPACE"
+                    # Ensure it's started
+                    gh codespace stop -c "$EXISTING_CODESPACE" || true
+                    gh codespace view -c "$EXISTING_CODESPACE"
                   fi
         
-                  # 2. Wait for the Codespace to be 'Available'
-                  echo "Waiting for Codespace to initialize..."
-                  sleep 10 
-        
-                  # 3. Run a command inside the Codespace via SSH
-                  # Replace 'ls -la' with the command you actually want to run inside g2ray
+                  # 2. Attempt to run command, Rebuild if SSH fails
                   echo "Executing command inside Codespace..."
-                  gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la && echo 'Hello from inside the Codespace!'"
+                  if ! gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la"; then
+                    echo "SSH failed. Attempting a rebuild to apply devcontainer features..."
+                    gh codespace rebuild -c "$EXISTING_CODESPACE" --full
+                    # Wait for rebuild
+                    sleep 60 
+                    gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la"
+                  fi
