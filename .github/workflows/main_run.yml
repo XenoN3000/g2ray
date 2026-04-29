@@ -15,20 +15,22 @@ jobs:
           # Uses the PAT secret you created earlier
           GH_TOKEN: ${{ secrets.GH_TOKEN }} 
         run: |
-                echo "Checking for existing Codespaces for ${{ github.repository }}..."
-                
-                # Fetches the name of the first existing Codespace for this repository
-                EXISTING_CODESPACE=$(gh codespace list --repo ${{ github.repository }} --json name --jq '.[0].name')
-                
-                if [ -z "$EXISTING_CODESPACE" ]; then
-                  echo "No existing Codespace found. Creating a new one..."
-                  gh codespace create --repo ${{ github.repository }} --branch ${{ github.ref_name }}
-                else
-                  echo "Found existing Codespace: $EXISTING_CODESPACE"
-                  echo "Ensuring the Codespace is started..."
-                  
-                  # Using 'view' with the codespace name will trigger it to start if it's currently shut down
-                  gh codespace view -c "$EXISTING_CODESPACE"
-                  
-                  echo "Codespace $EXISTING_CODESPACE is ready!"
-                fi
+                  # 1. Find existing codespace
+                  EXISTING_CODESPACE=$(gh codespace list --repo ${{ github.repository }} --json name --jq '.[0].name')
+        
+                  if [ -z "$EXISTING_CODESPACE" ]; then
+                    echo "Creating new Codespace..."
+                    # Create and capture the name of the new codespace
+                    EXISTING_CODESPACE=$(gh codespace create --repo ${{ github.repository }} --branch ${{ github.ref_name }})
+                  else
+                    echo "Using existing Codespace: $EXISTING_CODESPACE"
+                  fi
+        
+                  # 2. Wait for the Codespace to be 'Available'
+                  echo "Waiting for Codespace to initialize..."
+                  sleep 10 
+        
+                  # 3. Run a command inside the Codespace via SSH
+                  # Replace 'ls -la' with the command you actually want to run inside g2ray
+                  echo "Executing command inside Codespace..."
+                  gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la && echo 'Hello from inside the Codespace!'"
