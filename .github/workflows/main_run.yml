@@ -21,22 +21,38 @@ jobs:
                   if [ -z "$EXISTING_CODESPACE" ]; then
                     echo "Creating new Codespace..."
                     gh codespace create --repo ${{ github.repository }} --branch ${{ github.ref_name }}
-                    # Give it a moment to provision
                     sleep 30
                     EXISTING_CODESPACE=$(gh codespace list --repo ${{ github.repository }} --json name --jq '.[0].name')
                   else
                     echo "Using existing Codespace: $EXISTING_CODESPACE"
-                    # Ensure it's started
-                    gh codespace stop -c "$EXISTING_CODESPACE" || true
-                    gh codespace view -c "$EXISTING_CODESPACE"
+                    # Wake it up
+                    gh codespace view -c "$EXISTING_CODESPACE" > /dev/null
                   fi
         
-                  # 2. Attempt to run command, Rebuild if SSH fails
-                  echo "Executing command inside Codespace..."
-                  if ! gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la"; then
-                    echo "SSH failed. Attempting a rebuild to apply devcontainer features..."
+                  # 2. Check if SSH is working, rebuild if not
+                  if ! gh codespace ssh -c "$EXISTING_CODESPACE" -- "true" 2>/dev/null; then
+                    echo "SSH not available. Triggering rebuild..."
                     gh codespace rebuild -c "$EXISTING_CODESPACE" --full
-                    # Wait for rebuild
-                    sleep 60 
-                    gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la"
+                    
+                    echo "Waiting for rebuild to complete (this can take 2-5 minutes)..."
+                    # Retry loop: check every 30 seconds for up to 10 minutes
+                    SUCCESS=false
+                    for i in {1..20}; do
+                      if gh codespace ssh -c "$EXISTING_CODESPACE" -- "true" 2>/dev/null; then
+                        echo "Codespace is back online and SSH is ready!"
+                        SUCCESS=true
+                        break
+                      fi
+                      echo "Still rebuilding... (Attempt $i/20)"
+                      sleep 30
+                    done
+        
+                    if [ "$SUCCESS" = false ]; then
+                      echo "Codespace failed to become ready in time."
+                      exit 1
+                    fi
                   fi
+        
+                  # 3. Finally, run your logic
+                  echo "Running your code inside the Codespace..."
+                  gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la && echo 'Success!'"
