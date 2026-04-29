@@ -13,7 +13,7 @@ jobs:
       - name: Create or Start Codespace via GitHub CLI
         env:
           # Uses the PAT secret you created earlier
-          GH_TOKEN: ${{ secrets.CODESPACE_PAT }} 
+          GH_TOKEN: ${{ secrets.GH_TOKEN }} 
         run: |
           echo "Checking for existing Codespaces for ${{ github.repository }}..."
           
