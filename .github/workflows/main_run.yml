@@ -28,31 +28,34 @@ jobs:
                     # Wake it up
                     gh codespace view -c "$EXISTING_CODESPACE" > /dev/null
                   fi
+                
+                         # ... (previous logic for finding/creating codespace) ...
         
-                  # 2. Check if SSH is working, rebuild if not
                   if ! gh codespace ssh -c "$EXISTING_CODESPACE" -- "true" 2>/dev/null; then
                     echo "SSH not available. Triggering rebuild..."
                     gh codespace rebuild -c "$EXISTING_CODESPACE" --full
                     
-                    echo "Waiting for rebuild to complete (this can take 2-5 minutes)..."
-                    # Retry loop: check every 30 seconds for up to 10 minutes
+                    echo "Waiting for rebuild to complete (Extended Timeout: 15 mins)..."
                     SUCCESS=false
-                    for i in {1..20}; do
+                    # Increased to 30 attempts (15 minutes total)
+                    for i in {1..30}; do
+                      # Try to wake it up and test SSH
+                      gh codespace view -c "$EXISTING_CODESPACE" > /dev/null 2>&1
                       if gh codespace ssh -c "$EXISTING_CODESPACE" -- "true" 2>/dev/null; then
-                        echo "Codespace is back online and SSH is ready!"
+                        echo "Codespace is online and SSH is ready!"
                         SUCCESS=true
                         break
                       fi
-                      echo "Still rebuilding... (Attempt $i/20)"
+                      echo "Still waiting for rebuild/start... (Attempt $i/30)"
                       sleep 30
                     done
         
                     if [ "$SUCCESS" = false ]; then
-                      echo "Codespace failed to become ready in time."
+                      echo "Codespace failed to become ready. Check manual rebuild status at https://github.com/codespaces"
                       exit 1
                     fi
                   fi
         
                   # 3. Finally, run your logic
                   echo "Running your code inside the Codespace..."
-                  gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la && echo 'Success!'"
+                  gh codespace ssh -c "$EXISTING_CODESPACE" -- "cd /workspaces/g2ray && ls -la"
