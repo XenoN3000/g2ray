@@ -1,82 +1,35 @@
-name: Start tunnel
+name: Create or Start Codespace
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual triggering from the Actions tab
 
 jobs:
-  start:
+  manage-codespace:
     runs-on: ubuntu-latest
-
-    env:
-      GH_TOKEN: ${{ secrets.GH_TOKEN }}
-      CODESPACE_NAME: ${{ secrets.CODESPACE_NAME }}
-
     steps:
-      - name: Verify secrets
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create or Start Codespace via GitHub CLI
+        env:
+          # Uses the PAT secret you created earlier
+          GH_TOKEN: ${{ secrets.CODESPACE_PAT }} 
         run: |
-          test -n "$GH_TOKEN"
-          test -n "$CODESPACE_NAME"
-
-      - name: Check GitHub CLI
-        run: gh --version
-
-      - name: Authenticate gh
-        run: gh auth status
-
-      - name: Start codespace
-        run: |
-          gh api \
-            --method POST \
-            /user/codespaces/$CODESPACE_NAME/start
-
-      - name: Wait until codespace is available
-        run: |
-          for i in {1..60}; do
-            STATE=$(gh api /user/codespaces/$CODESPACE_NAME --jq '.state')
-            echo "Codespace state: $STATE"
-
-            if [ "$STATE" = "Available" ] || [ "$STATE" = "Running" ]; then
-              exit 0
-            fi
-
-            sleep 5
-          done
-
-          echo "Timed out waiting for codespace"
-          exit 1
-
-      - name: Wait for Xray startup
-        run: sleep 5
-
-      - name: Show Xray logs
-        run: |
-          echo "Fetching logs from codespace..."
-          gh codespace ssh -c "${CODESPACE_NAME}" -- "echo '--- XRAY LOG ---' && tail -n 200 /tmp/xray.log || true"
-
-      - name: Check tunnel health
-        run: |
-          URL="https://${CODESPACE_NAME}-443.app.github.dev"
-
-          for i in {1..20}; do
-            if curl -k -I --max-time 5 "$URL" >/dev/null 2>&1; then
-              echo "Tunnel is reachable"
-              exit 0
-            fi
-
-            echo "Waiting for tunnel..."
-            sleep 3
-          done
-
-          echo "Tunnel health check failed"
-          exit 1
-
-      - name: Check if Xray process is running
-        run: gh codespace ssh -c "${CODESPACE_NAME}" -- "ps aux | grep xray || true"
-
-      - name: Print VLESS link
-        run: |
-          echo "============================"
-          echo "VLESS LINK"
-          echo "============================"
-          echo "vless://550e8400-e29b-41d4-a716-446655440000@94.130.50.12:443?encryption=none&security=tls&type=xhttp&mode=packet-up&sni=${CODESPACE_NAME}-443.app.github.dev&path=%2F#ghtun"
-          echo "============================"
+          echo "Checking for existing Codespaces for ${{ github.repository }}..."
+          
+          # Fetches the name of the first existing Codespace for this repository
+          EXISTING_CODESPACE=$(gh codespace list --repo ${{ github.repository }} --json name --jq '.[0].name')
+          
+          if [ -z "$EXISTING_CODESPACE" ]; then
+            echo "No existing Codespace found. Creating a new one on branch ${{ github.ref_name }}..."
+            gh codespace create --repo ${{ github.repository }} --branch ${{ github.ref_name }}
+            echo "New Codespace successfully created!"
+          else
+            echo "Found existing Codespace: $EXISTING_CODESPACE"
+            echo "Starting the existing Codespace..."
+            
+            # Starts the codespace (if it's already running, this just ensures it stays active)
+            gh codespace start --codespace $EXISTING_CODESPACE
+            
+            echo "Codespace $EXISTING_CODESPACE is now active and running!"
+          fi
