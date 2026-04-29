@@ -15,21 +15,20 @@ jobs:
           # Uses the PAT secret you created earlier
           GH_TOKEN: ${{ secrets.GH_TOKEN }} 
         run: |
-          echo "Checking for existing Codespaces for ${{ github.repository }}..."
-          
-          # Fetches the name of the first existing Codespace for this repository
-          EXISTING_CODESPACE=$(gh codespace list --repo ${{ github.repository }} --json name --jq '.[0].name')
-          
-          if [ -z "$EXISTING_CODESPACE" ]; then
-            echo "No existing Codespace found. Creating a new one on branch ${{ github.ref_name }}..."
-            gh codespace create --repo ${{ github.repository }} --branch ${{ github.ref_name }}
-            echo "New Codespace successfully created!"
-          else
-            echo "Found existing Codespace: $EXISTING_CODESPACE"
-            echo "Starting the existing Codespace..."
-            
-            # Starts the codespace (if it's already running, this just ensures it stays active)
-            gh codespace start --codespace $EXISTING_CODESPACE
-            
-            echo "Codespace $EXISTING_CODESPACE is now active and running!"
-          fi
+                echo "Checking for existing Codespaces for ${{ github.repository }}..."
+                
+                # Fetches the name of the first existing Codespace for this repository
+                EXISTING_CODESPACE=$(gh codespace list --repo ${{ github.repository }} --json name --jq '.[0].name')
+                
+                if [ -z "$EXISTING_CODESPACE" ]; then
+                  echo "No existing Codespace found. Creating a new one..."
+                  gh codespace create --repo ${{ github.repository }} --branch ${{ github.ref_name }}
+                else
+                  echo "Found existing Codespace: $EXISTING_CODESPACE"
+                  echo "Ensuring the Codespace is started..."
+                  
+                  # Using 'view' with the codespace name will trigger it to start if it's currently shut down
+                  gh codespace view -c "$EXISTING_CODESPACE"
+                  
+                  echo "Codespace $EXISTING_CODESPACE is ready!"
+                fi
