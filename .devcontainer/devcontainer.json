@@ -26,5 +26,11 @@
   "forwardPorts": [443],
   "hostRequirements": {
     "cpus": 2
-  }
+  },
+  "name": "G2Ray Codespace",
+    "features": {
+        "ghcr.io/devcontainers/features/sshd:1": {
+            "version": "latest"
+        }
+    }
 }
